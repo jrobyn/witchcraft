@@ -1,0 +1,831 @@
+﻿<!DOCTYPE html>
+<html>
+	<head>
+		<title>Witchcraft Game</title>
+		<meta charset="utf-8">
+		<meta name="author" content="Jaye Robyn">
+		<link rel = "stylesheet" type = "text/css" href = "../style_main.css"/>
+		<script async src="https://www.googletagmanager.com/gtag/js?id=UA-110325075-1"></script>
+		<script>
+		  window.dataLayer = window.dataLayer || [];
+		  function gtag(){dataLayer.push(arguments);}
+		  gtag('js', new Date());
+		  gtag('config', 'UA-110325075-1');
+		</script>
+	</head>
+	
+	<body>
+		<div class ="article">
+			<hr>
+			<h1>Witchcraft Game</h1>
+			<p>Previous score: <span id="highscore">0</span> | Projectiles in memory: <span id="magiccount">0</span></p>
+			<canvas id="game" width="1000" height="700" style="border:1px solid #000000;">
+				Please use a modern web browser that supports the HTML5 canvas tag in order to play the game.
+			</canvas>
+		
+				<script>
+				//*************************setup**
+				/**initial set up -
+				canvas prepared, global variables created, and drawMenu function called
+				I like global variables almost as much as I like web 1.0**/
+				//variables for tracking mouse coordinates
+				var mouseX;
+				var mouseY;
+
+				//variables for tracking player coordinates
+				var playerX;
+				var playerY;
+				//direction player is facing described with boolean
+				var playerFacingRight = true;
+				//change player step
+				var playerStep = false;
+
+				//variables for tracking enemy coordinates
+				var femaleEnemyX;
+				var maleEnemyX;
+				//change enemy step
+				var enemyAttackStage;
+
+				//where the magic is kept
+				var leftMagic = [];
+				var rightMagic = [];
+				var holyRay = [];
+				var scoreBonus = [];
+				var healthBonus = [];
+
+				//player lives, score, and highscore - to display at the top of screen
+				var lives = 0;
+				var score = 0;
+				var sessionHighscore = 0;
+
+				//set up the canvas
+				var canvas = document.getElementById("game");
+				var context = canvas.getContext("2d");
+				var boundingBox = canvas.getBoundingClientRect();
+
+				//main game background loaded here instead of every time menu returned to
+				var background = new Image();
+				background.src = "witchcraft/screens/ex_background.png";
+				//load player images here to prevent a small bit of flickering first time player presses keys in either direction
+				var playerImg = new Image();
+				playerImg.src = "witchcraft/player/p_step.png";
+				playerImg.src = "witchcraft/player/p_idle.png";
+				playerImg.src = "witchcraft/player/p_step_m.png";
+				playerImg.src = "witchcraft/player/p_idle_m.png";
+
+				//sound effects
+				var stabCycle = 0;
+				var stab = new Audio("witchcraft/sounds/stab.mp3");
+				var stab1 = new Audio("witchcraft/sounds/stab.mp3");
+				var pickupCycle = 0;
+				var pickup = new Audio("witchcraft/sounds/pickup.mp3");
+				var pickup1 = new Audio("witchcraft/sounds/pickup.mp3");
+				var collideCycle = 0;
+				var collide = new Audio("witchcraft/sounds/collide.mp3");
+				var collide1 = new Audio("witchcraft/sounds/collide.mp3");
+				var shoot = new Audio("witchcraft/sounds/shoot.mp3");
+				var death = new Audio("witchcraft/sounds/death.mp3");
+				var menu = new Audio("witchcraft/sounds/menu.mp3");
+
+				//draw the main menu as the first screen seen on page load
+				drawMenu();
+
+				//*************************menus**
+				/**draws the main menu -
+				adds main menu background, adds listener for button presses,
+				adds rectangle buttons, adds text to buttons, styles them**/
+				function drawMenu() {
+					//add the menu background
+					var menu = new Image();
+					//make sure that the background image loads before doing stuff
+					menu.onload = function() {
+						context.drawImage(menu, 0, 0);	
+						//listen for clicks, go to onMenuButtonClick if one is heard
+						canvas.addEventListener("click", onMenuButtonClick, false);
+						//draw solid rectangles with this structure: x pos, y pos, x len, y len
+						context.fillStyle = "#666666";	
+						context.fillRect(240, 490, 470, 175);
+						context.fillStyle = "#808080";
+						context.fillRect(250, 500, 200, 75);
+						context.fillRect(500, 500, 200, 75);
+						context.fillRect(275, 600, 400, 50);
+						//write stylised text onto the buttons to describe them
+						context.font = "18px Georgia";
+						context.fillStyle = "#000000";
+						context.fillText("PLAY THE GAME", 280, 540);
+						context.fillText("VIEW THE SCORES", 515, 540);
+						context.fillText("LEARN MORE ABOUT THIS", 350, 632);
+					}
+					menu.src = "witchcraft/screens/ex_menu.png";
+				}
+
+				/**takes a click event and checks if mouse is over a main menu button -
+				the range of each button coordinates are matched against the click coordinates in turn
+				a new page is displayed if one was requested with the click**/
+				function onMenuButtonClick(e) {
+					//find mouse coordinates
+					mouseX = (e.clientX-boundingBox.left) * (canvas.width / boundingBox.width);	
+					mouseY = (e.clientY-boundingBox.top) * (canvas.height / boundingBox.height);
+					//check start button
+					//if x coordinates of click match first button coordinates:
+					if (mouseX >= 250 && mouseX <= 450) {
+						//if yes, check range of y coordinates also:
+						if (mouseY >= 500 && mouseY <= 575) {
+							//new screen was requested, so old screen cleared
+							canvas.width = canvas.width;
+							//main menu's listener cleared from future pages
+							canvas.removeEventListener("click", onMenuButtonClick, false);
+							//play sound
+							menu.play();
+							//function to draw the new screen
+							startGame();
+						}
+					}
+					//check leaderboard button
+					if (mouseX >= 500 && mouseX <= 700) {
+						if (mouseY >= 500 && mouseY <= 575) {
+							canvas.width = canvas.width;
+							canvas.removeEventListener("click", onMenuButtonClick, false);
+							drawLeaderboard();
+						}
+					}
+					//check about page button
+					if (mouseX >= 275 && mouseX <= 675) {
+						if (mouseY >= 600 && mouseY <= 650) {
+							canvas.width = canvas.width;
+							canvas.removeEventListener("click", onMenuButtonClick, false);
+							drawAbout();
+						}
+					}
+				}
+
+				/**draws the button for returning the main menu -
+				this is used by the leaderboard screen, about screen, and death screen
+				draws one button, adds text, creates listener for clicks**/
+				function createMenuReturnButton() {
+					//draw solid rectangle
+					context.fillStyle = "#808080";
+					context.fillRect(275, 600, 400, 50);
+					//write stylised text on the button to describe it
+					context.font = "18px Georgia";
+					context.fillStyle = "#000000";
+					context.fillText("RETURN TO MAIN MENU", 350, 632);
+					//listen for clicks, go to onReturnButtonClick if one is heard
+					canvas.addEventListener("click", menuReturnButtonClick, false);
+				}
+
+				/**takes a click event and checks if mouse is over return to main menu button -
+				the range of button coordinates is matched against the click coordinates
+				main menu is displayed if it was requested with the click**/
+				function menuReturnButtonClick(e) {
+					//find mouse coordinates
+					mouseX = (e.clientX-boundingBox.left) * (canvas.width / boundingBox.width);	
+					mouseY = (e.clientY-boundingBox.top) * (canvas.height / boundingBox.height);
+					//if x coordinates of click match main menu button coordinates:	
+					if (mouseX >= 275 && mouseX <= 675) {
+						//if yes, check range of y coordinates also:
+						if (mouseY >= 600 && mouseY <= 650) {
+							//main menu was requested, so old screen cleared
+							canvas.width = canvas.width;
+							//return button's listener cleared, so it won't interfere with main menu
+							canvas.removeEventListener("click", menuReturnButtonClick, false);
+							//function to draw the main menu
+							drawMenu();
+						}
+					} 
+				}
+
+				/**for displaying the about screen -
+				draws background, calls function to create main menu return button
+				has information about the game**/
+				function drawAbout() {
+					var about = new Image();
+					//make sure that the background image loads before doing stuff
+					about.onload = function() {
+						context.drawImage(about, 0, 0);
+						createMenuReturnButton();
+					}
+					about.src = "witchcraft/screens/ex_about.png";
+				}
+
+				/**for displaying the leaderboard screen -
+				draws background, calls function to create main menu return button
+				TO DO writes scores onto screen**/
+				function drawLeaderboard() {
+					var leaderboard = new Image();
+					//make sure that the background image loads before doing stuff
+					leaderboard.onload = function() {
+						context.drawImage(leaderboard, 0, 0);
+						createMenuReturnButton();
+						context.font = "32px Georgia";
+						context.fillStyle = "#000000";
+						context.fillText("YOU SCORED:", 200, 200);
+						context.fillText(score, 550, 200);
+					}
+					leaderboard.src = "witchcraft/screens/ex_leaderboard.png";
+				}
+
+				/**for displaying the death screen -
+				draws background, calls function to create main menu return button
+				TO DO displays last game session score**/
+				function drawDeath() {
+					var death = new Image();
+					//make sure that the background image loads before doing stuff
+					death.onload = function() {
+						context.drawImage(death, 0, 0);
+						createMenuReturnButton();
+						context.font = "32px Georgia";
+						context.fillStyle = "#000000";
+						context.fillText("YOU SCORED:", 250, 225);
+						context.fillText(score, 275, 270);
+						//empty arrays
+						leftMagic = [];
+						rightMagic = [];
+						holyRay = [];
+						scoreBonus = [];
+						healthBonus = [];
+						document.getElementById("magiccount").innerHTML = (leftMagic.length + rightMagic.length + holyRay.length + scoreBonus.length + healthBonus.length);
+					}
+					death.src = "witchcraft/screens/ex_death.png";
+				}
+
+				//*************************game**
+				/**the main game's setup function - 
+				restore lives, score, and player coordinates to default each game session
+				then draw the game background once and enter the main game loop**/
+				function startGame() {
+					//set lives and score to starting position
+					lives = 3;
+					score = 0;
+					//set player coordinates to (rough) middle of screen
+					playerX = 440;
+					playerY = 586;
+					playerFacingRight = true;
+					//set enemy coordinates to edges of screen
+					maleEnemyX = -30;
+					femaleEnemyX = 950;
+					enemyAttackStage = 0;
+					//draw background
+					context.drawImage(background, 0, 0);
+					//enter game loop
+					game_id = setInterval(gameLoop, 75);
+					canvas.addEventListener("click", onMagicClick, false);
+				}
+
+				/**loops the game world -
+				clears screen every loop, then redraws objects with most up-to-date coordinates
+				unless those coordinates are off screen, in which case they are removed
+				lives and score are added to the top of the screen
+				if the player runs out of lives: end the loop and go the death screen
+				increasing difficulty with increasing score: different ratios of projectiles spawned**/
+				function gameLoop() {
+					//clear old objects from the screen
+					canvas.width = canvas.width;
+					
+					//don't continue if zero lives (or negative lives!)
+					if (lives <= 0) {
+						//play the spooky death sound
+						death.play();
+						//end the loop
+						clearInterval(game_id);
+						//remove click listener for projectiles
+						canvas.removeEventListener("click", onMagicClick, false);
+						//draw new window
+						drawDeath();
+						//update session highscore if necessary (if current score is highest score)
+						if (score > sessionHighscore) {
+							document.getElementById("highscore").innerHTML = score;
+							//if it's possible to use local storage
+							/*if(typeof(Storage) !== "undefined") {
+								localStorage.setItem("highscore", score);
+							}*/
+						}
+					}
+					
+					//if the player has lives, keep going
+					else {
+						//restore background and update character positions
+						context.drawImage(background, 0, 0);
+						drawPlayer(playerX, playerY);
+						drawFemaleEnemy(femaleEnemyX);
+						drawMaleEnemy(maleEnemyX);
+						//increment score so it gets bigger the longer the player survives
+						score++;
+						//change enemy step
+						enemyAttackStage += 1;
+						if (enemyAttackStage == 8) {
+							enemyAttackStage = 1;
+						}
+						//and move enemies
+						maleEnemyX += 7;
+						femaleEnemyX -= 7;
+						
+						//score and life at the top of the canvas
+						//a box to put them in
+						context.fillStyle = "#666666";	
+						context.fillRect(15, 15, 200, 30);
+						context.font = "18px Georgia";
+						context.fillStyle = "#000000";
+						context.fillText(("Life: " + lives + "| Score: " + score), 20, 35);
+						
+						//if the enemies run off the screen then loop them back around
+						if (femaleEnemyX < -30) {
+							femaleEnemyX = 950;
+						}
+						if (maleEnemyX > 950) {
+							maleEnemyX = -30;
+						}
+						
+						//for left magic projectiles
+						for (var i = 0; i < leftMagic.length; i++) {
+							//remove old magic projectiles from list if they are offscreen (left)
+							if (leftMagic[i].xval < 0) { 
+								leftMagic.splice(i,1);
+							}
+							//draw other magic projectiles
+							else {
+								//draw the magic
+								context.drawImage(leftMagic[i].img, leftMagic[i].xval, playerY + 30, 10, 10);
+								//move the magic
+								leftMagic[i].xval -= 35;
+								//check magic projectile for collision with male enemy
+								if ((leftMagic[i].xval >= maleEnemyX) && (leftMagic[i].xval <= maleEnemyX + 81)) {
+									//remove projectile so it doesnt continue hitting them over and over
+									leftMagic.splice(i,1);
+									//cycle sound effects
+									if (collideCycle == 0) {
+										collide.play();
+									}
+									if (collideCycle == 1) {
+										collide1.play();
+									}
+									collideCycle += 1;
+									if (collideCycle > 1) {
+										collideCycle = 0;
+									}
+									//fly backwards
+									maleEnemyX -= 125;
+									//don't let them fly offscreen
+									if (maleEnemyX < -30) {
+										maleEnemyX = -30;
+									}
+								}
+							}
+						}
+						
+						//do the same for right magic projectiles, with the other side of the screen
+						for (var i = 0; i < rightMagic.length; i++) {
+							if (rightMagic[i].xval > boundingBox.width) { 
+								rightMagic.splice(i,1);
+							}
+							else {
+								context.drawImage(rightMagic[i].img, rightMagic[i].xval, playerY + 30, 10, 10);
+								rightMagic[i].xval += 35;
+								if ((rightMagic[i].xval >= femaleEnemyX) && (rightMagic[i].xval <= femaleEnemyX + 81)) {
+									rightMagic.splice(i,1);
+									//cycle sound effects
+									if (collideCycle == 0) {
+										collide.play();
+									}
+									if (collideCycle == 1) {
+										collide1.play();
+									}
+									collideCycle += 1;
+									if (collideCycle > 1) {
+										collideCycle = 0;
+									}
+									femaleEnemyX += 125;
+									if (femaleEnemyX > 950) {
+										femaleEnemyX = 950;
+									}
+								}
+							}
+						}
+						
+						//check female enemy for collision with player
+						if ((femaleEnemyX >= playerX) && (femaleEnemyX <= (playerX + 72))) {
+							//play stabbing sound
+							stab.play();
+							//player is injured
+							lives--;
+							//fly backwards
+							playerX -= 40;
+							femaleEnemyX += 40;
+						}
+						//check male enemy for collision with player
+						if ((maleEnemyX >= playerX) && (maleEnemyX <= (playerX + 72))) {
+							stab1.play();
+							lives--;
+							playerX += 40;
+							maleEnemyX -= 40;
+						}
+						
+						//draw holy rays
+						for (var i = 0; i < holyRay.length; i++) {
+							//remove rays that hit the floor
+							if (holyRay[i].yval > 615) {
+								holyRay.splice(i,1);
+							}
+							//draw others
+							else {
+								context.drawImage(holyRay[i].img, holyRay[i].xval, holyRay[i].yval);
+								holyRay[i].yval += 20;
+								//check for collision with player on y coordinates
+								if ((holyRay[i].yval >= playerY) && (holyRay[i].yval <= (playerY + 81))) {
+									//check for collision with player on x coordinates
+									if ((holyRay[i].xval >= playerX) && (holyRay[i].xval <= (playerX + 72))) {
+										if (stabCycle == 0) {
+											stab.play();
+										}
+										if (stabCycle == 1) {
+											stab1.play();
+										}
+										stabCycle += 1;
+										if (stabCycle > 1) {
+											stabCycle = 0;
+										}
+										lives--;
+										holyRay.splice(i,1);
+									}
+								}
+							}
+						}
+						
+						//draw health pickups
+						for (var i = 0; i < healthBonus.length; i++) {
+							if (healthBonus[i].yval > 615) {
+								healthBonus.splice(i,1);
+							}
+							else {
+								context.drawImage(healthBonus[i].img, healthBonus[i].xval, healthBonus[i].yval);
+								healthBonus[i].yval += 25;
+								if ((healthBonus[i].yval >= playerY) && (healthBonus[i].yval <= (playerY + 81))) {
+									if ((healthBonus[i].xval >= playerX) && (healthBonus[i].xval <= (playerX + 72))) {
+										pickup.play();
+										//don't give the player over three lives!!
+										if (lives < 3) {
+											lives++;
+										}
+										//the player can have double the usual of a point pickup instead
+										else {
+											score += 700;
+										}
+										healthBonus.splice(i,1);
+									}
+								}
+							}
+						}
+						
+						//draw score pickups
+						for (var i = 0; i < scoreBonus.length; i++) {
+							if (scoreBonus[i].yval > 615) {
+								scoreBonus.splice(i,1);
+							}
+							else {
+								context.drawImage(scoreBonus[i].img, scoreBonus[i].xval, scoreBonus[i].yval);
+								scoreBonus[i].yval += 25;
+								if ((scoreBonus[i].yval >= playerY) && (scoreBonus[i].yval <= (playerY + 81))) {
+									if ((scoreBonus[i].xval >= playerX) && (scoreBonus[i].xval <= (playerX + 72))) {
+										//cycle sound effects
+										if (pickupCycle == 0) {
+											pickup.play();
+										}
+										if (pickupCycle == 1) {
+											pickup1.play();
+										}
+										pickupCycle += 1;
+										if (pickupCycle == 1) {
+											pickupCycle = 0;
+										}
+										score += 350;
+										scoreBonus.splice(i,1);
+									}
+								}
+							}
+						}
+						
+						//new falling items created on random loops and chosen randomly with bias towards damaging projectiles
+						//frequency of dangerous objects increases with score
+						var rand = Math.floor((Math.random() * 100) + 1);
+						//extreme: hardest difficulty with highest average for projectiles, mostly dangerous
+						if (score > 12250) {
+							if (rand < 70) {
+								if (rand == 1) {
+									newHealthBonus();
+								}
+								else if (rand < 16) {
+									newScoreBonus();
+								}
+								else {
+									newHolyRay();
+								}
+							}		
+						}
+						//very hard: very many projectiles falling, very few health bonuses, but very high opportunity for score bonuses
+						if (score > 8000) {
+							if (rand < 50) {
+								if (rand == 1) {
+									newHealthBonus();
+								}
+								else if (rand < 12) {
+									newScoreBonus();
+								}
+								else {
+									newHolyRay();
+								}
+							}		
+						}
+						//hard: many projectiles falling, few health bonuses, but high opportunity for score bonuses
+						else if (score > 4500) {
+							if (rand < 40) {
+								if (rand == 1) {
+									newHealthBonus();
+								}
+								else if (rand < 9) {
+									newScoreBonus();
+								}
+								else {
+									newHolyRay();
+								}
+							}
+						}
+						//medium: more dangerous projectiles and fewer health bonuses (slightly increased score bonus %)
+						else if (score > 1250) {
+							if (rand < 30) {
+								if (rand == 1) {
+									newHealthBonus();
+								}
+								else if (rand < 7) {
+									newScoreBonus();
+								}
+								else {
+									newHolyRay();
+								}
+							}
+						}
+						//easy: few projectiles, 10% are health bonuses
+						else {
+							if (rand < 20) {
+								if (rand < 2) {
+									newHealthBonus();
+								}
+								else if (rand < 7) {
+									newScoreBonus();
+								}
+								else {
+									newHolyRay();
+								}
+							}
+						}
+					}
+					
+					//for testing
+					document.getElementById("magiccount").innerHTML = (leftMagic.length + rightMagic.length + holyRay.length + scoreBonus.length + healthBonus.length);
+				}
+
+				/**draws the player -
+				takes player's x and y coordinate to be drawn at, draws rectangular image
+				uses playerFacingRight to decide if image should be left or right facing
+				and uses playerStep to alternate between two images and animate a walk*/
+				function drawPlayer(playerX, playerY) {
+					//use a right facing image if player is facing right
+					if (playerFacingRight == true) {
+						//these images alternate with playerStep whenever movement key pressed
+						if (playerStep == true) {
+							playerImg.src = "witchcraft/player/p_step.png";
+							context.drawImage(playerImg, playerX, playerY);
+						}
+						else {
+							playerImg.src = "witchcraft/player/p_idle.png";
+							context.drawImage(playerImg, playerX, playerY);
+						}
+					}
+					//use a left facing image is player is not facing right
+					else {
+						//these images alternate with playerStep whenever movement key pressed
+						if (playerStep == true) {
+							playerImg.src = "witchcraft/player/p_step_m.png";
+							context.drawImage(playerImg, playerX, playerY);
+						}
+						else {
+							playerImg.src = "witchcraft/player/p_idle_m.png";
+							context.drawImage(playerImg, playerX, playerY);
+						}
+					}
+				}
+
+				/** draw female enemy -
+				takes x coordinate and places enemy on the ground using the male mob image**/
+				function drawFemaleEnemy(femaleEnemyX) {
+					var enemyImg = new Image();
+					if (enemyAttackStage == 0) {
+						enemyImg.src = "witchcraft/f_enemy/f_idle.png";
+					}
+					else if (enemyAttackStage == 1) {
+						enemyImg.src = "witchcraft/f_enemy/f_step.png";
+					}
+					else if (enemyAttackStage == 2 || enemyAttackStage == 5) {
+						enemyImg.src = "witchcraft/f_enemy/f_atk1.png";
+					}
+					else {
+						enemyImg.src = "witchcraft/f_enemy/f_atk2.png";
+					}
+					context.drawImage(enemyImg, femaleEnemyX, 586);
+				}
+
+				/** draw male enemy -
+				takes x coordinate and places enemy on the ground using the female mob image**/
+				function drawMaleEnemy(maleEnemyX) {
+					var enemyImg = new Image();
+					if (enemyAttackStage == 1) {
+						enemyImg.src = "witchcraft/m_enemy/m_idle.png";
+					}
+					else if (enemyAttackStage == 2) {
+						enemyImg.src = "witchcraft/m_enemy/m_step.png";
+					}
+					else if (enemyAttackStage == 3 || enemyAttackStage == 0) {
+						enemyImg.src = "witchcraft/m_enemy/m_atk1.png";
+					}
+					else {
+						enemyImg.src = "witchcraft/m_enemy/m_atk2.png";
+					}
+					context.drawImage(enemyImg, maleEnemyX, 580);
+				}
+
+				/**create magic projectile on click -
+				adds new magic to go left to leftMagic and new magic to go right to rightMagic
+				takes position of click to decide which side of player magic is created and direction of magic**/
+				function onMagicClick(e) {
+					var magicImg = new Image();
+					var boundingBox = canvas.getBoundingClientRect();
+					magicX = (e.clientX-boundingBox.left) * (canvas.width / boundingBox.width);
+					shoot.play();
+					//check which side of player to spawn magic on (and direction of magic)
+					if (magicX < playerX) {
+						magicImg.src = "witchcraft/item/magic_m.png";
+						var newMagic = {
+							img: magicImg,
+							xval: playerX - 10
+						};
+						leftMagic.push(newMagic);
+					}
+					else {
+						magicImg.src = "witchcraft/item/magic.png";
+						var newMagic = {
+							img: magicImg,
+							xval: playerX + 60
+						};
+						rightMagic.push(newMagic);
+					}
+				}
+
+				/**creates holy ray -
+				dangerous projectiles fall from sky and injure player on hit**/
+				function newHolyRay() {
+					var holyRayImg = new Image();
+					holyRayImg.onload = function() {
+						//get a random x position on canvas for the ray to start in
+						randX = (Math.floor(Math.random() * boundingBox.width) + 1);
+						var newMagic = {
+							img: holyRayImg,
+							xval: randX,
+							yval: 0
+						};
+						holyRay.push(newMagic);
+					}
+					holyRayImg.src = "witchcraft/item/holyRay.png";
+				}
+
+				/**creates health bonus -
+				good projectile falls from sky and heals player**/
+				function newHealthBonus() {
+					var healthBonusImg = new Image();
+					healthBonusImg.onload = function() {
+						//get a random x position on canvas for the ray to start in
+						randX = (Math.floor(Math.random() * boundingBox.width) + 1);
+						var newMagic = {
+							img: healthBonusImg,
+							xval: randX,
+							yval: 0
+						};
+						healthBonus.push(newMagic);
+					}
+					healthBonusImg.src = "witchcraft/item/bonusHealth.png";
+				}
+
+				/**creates score bonus -
+				good projectile falls from sky and gives player bonus score**/
+				function newScoreBonus() {
+					var scoreBonusImg = new Image();
+					scoreBonusImg.onload = function() {
+						//get a random x position on canvas for the ray to start in
+						randX = (Math.floor(Math.random() * boundingBox.width) + 1);
+						var newMagic = {
+							img: scoreBonusImg,
+							xval: randX,
+							yval: 0
+						};
+						scoreBonus.push(newMagic);
+					}
+					scoreBonusImg.src = "witchcraft/item/bonusPoints.png";
+				}
+
+				/**moves player left -
+				player is no longer facing right, and x coordinate decremented
+				does not allow player to move over left boundary of the screen**/
+				function moveLeft() {
+					//change direction player is said to face to left
+					playerFacingRight = false;
+					//alternate player image
+					playerStep = !playerStep;
+					//as long as the player is not going over the left boundary of the canvas,
+					if (playerX > 5) {
+						//decrement x coordinate slightly
+						playerX -= 5;
+					}
+				}
+
+				/**moves player up -
+				y coordinate decremented
+				does not allow player to move over upper boundary of the screen**/
+				/*function moveJump() {
+					//as long as the player is not going over the upper boundary of the canvas,
+					if (playerY > 10) {
+						//decrement y coordinate slightly
+						playerY -= 5;
+					}
+				}*/
+
+				/**moves player right -
+				player is no longer facing left, and x coordinate incremented
+				does not allow player to move over right boundary of the screen**/
+				function moveRight() {
+					//change direction player is said to face to right
+					playerFacingRight = true;
+					//alternate player image
+					playerStep = !playerStep;
+					//as long as the player is not going over the right boundary of the canvas,
+					if (playerX < (boundingBox.width - 60)) {
+						//increment x coordinate slightly
+						playerX += 5;
+					}
+				}
+
+				/**moves player down -
+				y coordinate incremented
+				does not allow player to move below floor/ lower boundary of the screen**/
+				/*function moveDown() {
+					//as long as the player is not going over the lower boundary of the canvas,
+					if (playerY < 586) {
+						//increment y coordinate slightly
+						playerY += 5;
+					}
+				}*/
+
+				/**detects and responds to keyboard commands -
+				a key is pressed, and if it is one of the control keys in the switch statement
+				then the appropriate function is called (otherwise nothing)**/
+				document.onkeydown = function(e) {
+					//the key pressed is stored in variable keyCode
+					var keyCode;
+					if (e == null) {
+						keyCode = window.event.keyCode;
+					}
+					else {
+						keyCode = e.keyCode;
+					}
+					//prints the key pressed onto the console, uncomment for testing
+					//console.log(keyCode);
+					//switch manages key presses which call functions
+					switch(keyCode) {
+						//left arrow
+						case 37:
+						//or 'a'
+						case 65:
+							moveLeft();
+							break; 
+							
+						//up arrow
+						/*case 38:
+							moveJump();
+							break;*/
+
+						//right arrow
+						case 39:
+						//or 'd'
+						case 68:
+							moveRight();
+							break; 
+						
+						//if key pressed was none of the above, do nothing
+						default:
+							break;
+					}
+				}
+			</script>
+
+			<p>Thanks for playing! <a href="../misc.html">Click here to return to the misc index.</a></p>
+			<br>
+		</div>
+		<br>
+</html>
